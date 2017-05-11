@@ -60,6 +60,7 @@ public class ThingActivity extends AppCompatActivity {
         CLEAR
     }
     private DisplayMode displayMode = DisplayMode.TEMPERATURE;
+    private boolean useFarenheit = false;
 
     private Speaker speaker;
     private int SPEAKER_READY_DELAY_MS = 300;
@@ -477,8 +478,13 @@ public class ThingActivity extends AppCompatActivity {
         @Override
         public void onSensorChanged(SensorEvent event) {
             lastTemperature = event.values[0];
-            tempTxt.setText("Current Temperature (time reported):\n    " + lastTemperature + "\n    " + Utilities.getDate
-                    ());
+            if (useFarenheit) {
+                tempTxt.setText("Current Temperature in Farenheit (time reported):\n    " + Utilities.convertCelciusToFahrenheit
+                        (lastTemperature) + "\n    " +  Utilities.getDate());
+            } else {
+                tempTxt.setText("Current Temperature in Celcius (time reported):\n    " + lastTemperature + "\n    " + Utilities.getDate());
+            }
+
 
             if (displayMode == DisplayMode.TEMPERATURE) {
                 updateDisplay(lastTemperature);
@@ -496,7 +502,8 @@ public class ThingActivity extends AppCompatActivity {
         @Override
         public void onSensorChanged(SensorEvent event) {
             lastPressure = event.values[0];
-            pressureTxt.setText("Barometric Pressure (time reported):\n    " + lastPressure + "\n    " + Utilities.getDate());
+            pressureTxt.setText("Barometric Pressure in hectoPascals (time reported):\n    " + lastPressure/100 + "\n    " + Utilities
+                    .getDate());
             if (displayMode == DisplayMode.PRESSURE) {
 
                 updateDisplay(lastPressure);

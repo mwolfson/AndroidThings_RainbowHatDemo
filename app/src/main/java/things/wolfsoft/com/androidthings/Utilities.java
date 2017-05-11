@@ -22,4 +22,14 @@ public class Utilities {
             return "xx";
         }
     }
+
+    // Converts to celcius
+    public static float convertFahrenheitToCelcius(float fahrenheit) {
+        return ((fahrenheit - 32) * 5 / 9);
+    }
+
+    // Converts to fahrenheit
+    public static  float convertCelciusToFahrenheit(float celsius) {
+        return ((celsius * 9) / 5) + 32;
+    }
 }
