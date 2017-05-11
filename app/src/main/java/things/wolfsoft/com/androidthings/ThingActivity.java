@@ -35,11 +35,16 @@ import java.util.Random;
 public class ThingActivity extends AppCompatActivity {
     private static final String TAG = "ThingActivity";
 
-    private Gpio ledGpio;
-
     private ButtonInputDriver buttonAInputDriver;
     private Button buttonB;
     private Button buttonC;
+
+    private Gpio ledGpioRed;
+    private Gpio ledGpioBlue;
+    private Gpio ledGpioGreen;
+    private static int RED_LED = 1;
+    private static int BLUE_LED = 2;
+    private static int GREEN_LED = 3;
 
     private Apa102 ledstrip;
     private int NUM_LEDS = 7;
@@ -51,22 +56,28 @@ public class ThingActivity extends AppCompatActivity {
     private static final float CLEAR_DISPLAY = 73638.45f;
     private enum DisplayMode {
         TEMPERATURE,
-        PRESSURE
+        PRESSURE,
+        CLEAR
     }
     private DisplayMode displayMode = DisplayMode.TEMPERATURE;
 
     private Speaker speaker;
     private int SPEAKER_READY_DELAY_MS = 300;
     private boolean isSpeakerMute = false;
-    private static int SOUND_HIGH = 1;
-
-    private static final int INTERVAL_BETWEEN_BLINKS_MS = 900;
-    private Handler blinkingLedHandler = new Handler();
+    private static int SOUND_LOW = 1;
+    private static int SOUND_MED = 4;
+    private static int SOUND_HIGH = 8;
 
     private Bmx280SensorDriver environmentalSensorDriver;
     private SensorManager sensorManager;
     private float lastTemperature;
     private float lastPressure;
+    private static final float BAROMETER_RANGE_LOW = 965.f;
+    private static final float BAROMETER_RANGE_HIGH = 1035.f;
+
+    private TextView titleTxt;
+    private TextView tempTxt;
+    private TextView pressureTxt;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -74,11 +85,14 @@ public class ThingActivity extends AppCompatActivity {
         setContentView(R.layout.activity_thing);
 
         Log.d(TAG, "Hello Android Things!");
+        titleTxt = (TextView) findViewById(R.id.text_title);
+        tempTxt = (TextView) findViewById(R.id.text_temperature);
+        pressureTxt = (TextView) findViewById(R.id.text_pressure);
 
         // Set current IP on display (need this to connect ADB)
         String currentIp = getIPAddress(true);
-        TextView txt = (TextView) findViewById(R.id.text_title);
-        txt.setText("Current IP address is: " + currentIp);
+
+        titleTxt.setText("Current IP (time started):\n    " + currentIp + "\n    " + Utilities.getDate());
         Log.d(TAG, "Current IP address is: " + currentIp);
 
         // Initialize buttons
@@ -87,9 +101,9 @@ public class ThingActivity extends AppCompatActivity {
             buttonAInputDriver = new ButtonInputDriver(BoardDefaults.getGPIOForBtnA(),
                     Button.LogicState.PRESSED_WHEN_LOW, KeyEvent.KEYCODE_A);
             buttonAInputDriver.register();
-            Log.d(TAG, "Initialized GPIO Button that generates a keypress with KEYCODE_A");
+            Log.d(TAG, "Button A registered, will generate KEYCODE_A");
         } catch (IOException e) {
-            throw new RuntimeException("Error initializing GPIO button", e);
+            throw new RuntimeException("Error initializing GPIO button A", e);
         }
 
         // Another way to register button events, simpler, but handles single press event
@@ -105,8 +119,17 @@ public class ThingActivity extends AppCompatActivity {
             Log.e(TAG, "button driver error", e);
         }
 
-        //SPI LED Lightstrip
-        //Inialize the rainbow of colors based on num of LEDs
+        //GPIO Individual Color LED
+        try {
+            PeripheralManagerService service = new PeripheralManagerService();
+            ledGpioRed = service.openGpio(BoardDefaults.getGPIOForRedLED());
+            ledGpioGreen = service.openGpio(BoardDefaults.getGPIOForGreenLED());
+            ledGpioBlue = service.openGpio(BoardDefaults.getGPIOForBlueLED());
+        } catch (IOException e) {
+            throw new RuntimeException("Problem connecting to IO Port", e);
+        }
+
+        //SPI LED Lightstrip and rainbow color array
         for (int i = 0; i < NUM_LEDS; i++) {
             float[] hsv = {i * 360.f / NUM_LEDS, 1.0f, 1.0f};
             mRainbow[i] = Color.HSVToColor(255, hsv);
@@ -130,30 +153,16 @@ public class ThingActivity extends AppCompatActivity {
             alphaDisplay = null;
         }
 
-
         // PWM speaker
         try {
             speaker = new Speaker(BoardDefaults.getSpeakerPwmPin());
             soundSpeaker(1);
+            Log.d(TAG, "Initialized PWM speaker");
         } catch (IOException e) {
-            throw new RuntimeException("Error initializing speaker", e);
+            throw new RuntimeException("Error initializing PWM speaker", e);
         }
 
-        //Initialzize Color LED
-        PeripheralManagerService service = new PeripheralManagerService();
-        try {
-            String blueLED = BoardDefaults.getGPIOForBlueLED();
-            String greenLED = BoardDefaults.getGPIOForGreenLED();
-            String redLED = BoardDefaults.getGPIOForRedLED();
-            ledGpio = service.openGpio(redLED);
-
-            ledGpio.setDirection(Gpio.DIRECTION_OUT_INITIALLY_LOW);
-            blinkingLedHandler.post(blinkingRunnable);
-        } catch (IOException e) {
-            throw new RuntimeException("Problem connecting to IO Port", e);
-        }
-
-        // Sensor Stack
+        // I2C Sensors - Temperature and Pressure
         sensorManager = ((SensorManager) getSystemService(SENSOR_SERVICE));
         try {
             environmentalSensorDriver = new Bmx280SensorDriver(BoardDefaults.getI2cBus());
@@ -170,6 +179,7 @@ public class ThingActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
 
+        //Button
         if (buttonAInputDriver != null) {
             try {
                 buttonAInputDriver.close();
@@ -183,29 +193,20 @@ public class ThingActivity extends AppCompatActivity {
             // TODO
         }
 
-
-        blinkingLedHandler.removeCallbacks(blinkingRunnable);
-
-
-
+        // GPIO LEDS
         try {
-            ledGpio.close();
+            ledGpioRed.setDirection(Gpio.DIRECTION_OUT_INITIALLY_LOW);
+            ledGpioBlue.setDirection(Gpio.DIRECTION_OUT_INITIALLY_LOW);
+            ledGpioGreen.setDirection(Gpio.DIRECTION_OUT_INITIALLY_LOW);
+
+            ledGpioRed.close();
+            ledGpioBlue.close();
+            ledGpioGreen.close();
         } catch (IOException e) {
             Log.e(TAG, "Error on PeripheralIO API", e);
         }
 
-        if (alphaDisplay != null) {
-            try {
-                alphaDisplay.clear();
-                alphaDisplay.setEnabled(false);
-                alphaDisplay.close();
-            } catch (IOException e) {
-                Log.e(TAG, "Error disabling display", e);
-            } finally {
-                alphaDisplay = null;
-            }
-        }
-
+        // LED Lightstrip
         try {
             if (ledstrip != null) {
                 try {
@@ -220,6 +221,19 @@ public class ThingActivity extends AppCompatActivity {
             }
         } catch (Exception e) {
             Log.e(TAG, "Error on closing LED strip", e);
+        }
+
+        // Alphanumeric Display
+        if (alphaDisplay != null) {
+            try {
+                alphaDisplay.clear();
+                alphaDisplay.setEnabled(false);
+                alphaDisplay.close();
+            } catch (IOException e) {
+                Log.e(TAG, "Error disabling display", e);
+            } finally {
+                alphaDisplay = null;
+            }
         }
 
         // Clean up sensor registrations
@@ -238,7 +252,6 @@ public class ThingActivity extends AppCompatActivity {
         }
     }
 
-    // --- BEGIN BUTTON SETUP
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_A) {
@@ -265,8 +278,9 @@ public class ThingActivity extends AppCompatActivity {
                 colors[5] = mRainbow[5];
                 colors[6] = mRainbow[6];
             }
-            soundSpeaker(1);
+            soundSpeaker(SOUND_LOW);
             runLedStrip(colors);
+            showLED(RED_LED);
 
             return true;
         }
@@ -302,8 +316,9 @@ public class ThingActivity extends AppCompatActivity {
                         colors[5] = mRainbow[rand.nextInt(NUM_LEDS)];
                         colors[6] = mRainbow[rand.nextInt(NUM_LEDS)];
 
-                        soundSpeaker(4);
+                        soundSpeaker(SOUND_MED);
                         runLedStrip(colors);
+                        showLED(GREEN_LED);
                     }
                 }
             };
@@ -317,13 +332,59 @@ public class ThingActivity extends AppCompatActivity {
                 public void onButtonEvent(Button button, boolean pressed) {
                     if (pressed) {
                         Log.d(TAG, "button C pressed");
+                        displayMode = DisplayMode.CLEAR;
                         updateDisplay(CLEAR_DISPLAY);
-                        soundSpeaker(8);
+                        soundSpeaker(SOUND_HIGH);
                         clearLedStrip();
+                        showLED(BLUE_LED);
                     }
                 }
             };
-    // --- END BUTTON SETUP
+
+    /**
+     * Helper Method to turn one of 3 LEDs, and turn off the others
+     * @param ledType
+     */
+    private void showLED(int ledType) {
+        try {
+            ledGpioRed.setDirection(Gpio.DIRECTION_OUT_INITIALLY_LOW);
+            ledGpioBlue.setDirection(Gpio.DIRECTION_OUT_INITIALLY_LOW);
+            ledGpioGreen.setDirection(Gpio.DIRECTION_OUT_INITIALLY_LOW);
+
+            switch (ledType) {
+                case 1:
+                    ledGpioRed.setDirection(Gpio.DIRECTION_OUT_INITIALLY_HIGH);
+                    break;
+                case 2:
+                    ledGpioBlue.setDirection(Gpio.DIRECTION_OUT_INITIALLY_HIGH);
+                    break;
+                case 3:
+                    ledGpioGreen.setDirection(Gpio.DIRECTION_OUT_INITIALLY_HIGH);
+                    break;
+
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void runLedStrip(int[] colors) {
+        try {
+            ledstrip.write(colors);
+            ledstrip.setBrightness(LEDSTRIP_BRIGHTNESS);
+        } catch (IOException e) {
+            Log.e(TAG, "Error setting ledstrip", e);
+        }
+    }
+
+    private void clearLedStrip() {
+        try {
+            ledstrip.write(new int[NUM_LEDS]);
+            ledstrip.setBrightness(0);
+        } catch (IOException e) {
+            Log.e(TAG, "Error setting ledstrip", e);
+        }
+    }
 
     private void soundSpeaker(int soundType) {
         if (!isSpeakerMute) {
@@ -365,40 +426,18 @@ public class ThingActivity extends AppCompatActivity {
         }
     }
 
-    private Runnable blinkingRunnable = new Runnable() {
-        @Override
-        public void run() {
-            try {
-                ledGpio.setValue(!ledGpio.getValue());
-                blinkingLedHandler.postDelayed(blinkingRunnable, INTERVAL_BETWEEN_BLINKS_MS);
-            } catch (IOException e) {
-                Log.e(TAG, "Error on PeripheralIO API", e);
-            }
-        }
-    };
-
-    private void runLedStrip(int[] colors) {
-        try {
-            ledstrip.write(colors);
-            ledstrip.setBrightness(LEDSTRIP_BRIGHTNESS);
-        } catch (IOException e) {
-            Log.e(TAG, "Error setting ledstrip", e);
-        }
-    }
-
-    private void clearLedStrip() {
-        try {
-            ledstrip.write(new int[NUM_LEDS]);
-            ledstrip.setBrightness(0);
-        } catch (IOException e) {
-            Log.e(TAG, "Error setting ledstrip", e);
-        }
-    }
-
     private void updateDisplay(float value) {
         if (alphaDisplay != null) {
             try {
-                if (value == CLEAR_DISPLAY) {
+                if (displayMode == DisplayMode.PRESSURE) {
+                    if (value > BAROMETER_RANGE_HIGH) {
+                        alphaDisplay.display("HIGH");
+                    } else if (value < BAROMETER_RANGE_LOW) {
+                        alphaDisplay.display("LOW");
+                    } else {
+                        alphaDisplay.display("MED");
+                    }
+                } else if (displayMode == DisplayMode.CLEAR) {
                     alphaDisplay.clear();
                 } else {
                     alphaDisplay.display(value);
@@ -407,44 +446,6 @@ public class ThingActivity extends AppCompatActivity {
                 Log.e(TAG, "Error setting display", e);
             }
         }
-    }
-
-
-
-
-    /**
-     * A utility method to return current IP
-     *
-     * @param useIPv4
-     * @return
-     */
-    private static String getIPAddress(boolean useIPv4) {
-        try {
-            List<NetworkInterface> interfaces = Collections.list(NetworkInterface.getNetworkInterfaces());
-            for (NetworkInterface intf : interfaces) {
-                List<InetAddress> addrs = Collections.list(intf.getInetAddresses());
-                for (InetAddress addr : addrs) {
-                    if (!addr.isLoopbackAddress()) {
-                        String sAddr = addr.getHostAddress();
-                        //boolean isIPv4 = InetAddressUtils.isIPv4Address(sAddr);
-                        boolean isIPv4 = sAddr.indexOf(':')<0;
-
-                        if (useIPv4) {
-                            if (isIPv4)
-                                return sAddr;
-                        } else {
-                            if (!isIPv4) {
-                                int delim = sAddr.indexOf('%'); // drop ip6 zone suffix
-                                return delim<0 ? sAddr.toUpperCase() : sAddr.substring(0, delim).toUpperCase();
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (Exception ex) {
-            Log.e(TAG, "Exception received: " + ex, ex);
-        }
-        return "";
     }
 
     // Callback used when we register the BMP280 sensor driver with the system's SensorManager.
@@ -476,7 +477,9 @@ public class ThingActivity extends AppCompatActivity {
         @Override
         public void onSensorChanged(SensorEvent event) {
             lastTemperature = event.values[0];
-//            Log.d(TAG, "Temperature sensor changed: " + lastTemperature);
+            tempTxt.setText("Current Temperature (time reported):\n    " + lastTemperature + "\n    " + Utilities.getDate
+                    ());
+
             if (displayMode == DisplayMode.TEMPERATURE) {
                 updateDisplay(lastTemperature);
             }
@@ -493,8 +496,9 @@ public class ThingActivity extends AppCompatActivity {
         @Override
         public void onSensorChanged(SensorEvent event) {
             lastPressure = event.values[0];
-//            Log.d(TAG, "Pressure sensor changed: " + lastPressure);
+            pressureTxt.setText("Barometric Pressure (time reported):\n    " + lastPressure + "\n    " + Utilities.getDate());
             if (displayMode == DisplayMode.PRESSURE) {
+
                 updateDisplay(lastPressure);
             }
         }
@@ -505,7 +509,39 @@ public class ThingActivity extends AppCompatActivity {
         }
     };
 
+    /**
+     * A utility method to return current IP
+     *
+     * @param useIPv4
+     * @return
+     */
+    private static String getIPAddress(boolean useIPv4) {
+        try {
+            List<NetworkInterface> interfaces = Collections.list(NetworkInterface.getNetworkInterfaces());
+            for (NetworkInterface intf : interfaces) {
+                List<InetAddress> addrs = Collections.list(intf.getInetAddresses());
+                for (InetAddress addr : addrs) {
+                    if (!addr.isLoopbackAddress()) {
+                        String sAddr = addr.getHostAddress();
+                        boolean isIPv4 = sAddr.indexOf(':') < 0;
 
+                        if (useIPv4) {
+                            if (isIPv4)
+                                return sAddr;
+                        } else {
+                            if (!isIPv4) {
+                                int delim = sAddr.indexOf('%'); // drop ip6 zone suffix
+                                return delim < 0 ? sAddr.toUpperCase() : sAddr.substring(0, delim).toUpperCase();
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            Log.e(TAG, "Exception received getting IP info: " + ex, ex);
+        }
+        return "NO IP ADDRESS FOUND";
+    }
 
 
 }

@@ -38,3 +38,9 @@ captures/
 
 # Keystore files
 *.jks
+
+.idea/*.xml
+
+.idea/libraries/*.xml
+
+.idea/copyright/*.xml
