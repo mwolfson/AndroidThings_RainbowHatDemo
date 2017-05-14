@@ -60,7 +60,7 @@ public class ThingActivity extends AppCompatActivity {
         CLEAR
     }
     private DisplayMode displayMode = DisplayMode.TEMPERATURE;
-    private boolean useFarenheit = false;
+    private boolean useFarenheit = true;
 
     private Speaker speaker;
     private int SPEAKER_READY_DELAY_MS = 300;
@@ -479,15 +479,14 @@ public class ThingActivity extends AppCompatActivity {
         public void onSensorChanged(SensorEvent event) {
             lastTemperature = event.values[0];
             if (useFarenheit) {
-                tempTxt.setText("Current Temperature in Farenheit (time reported):\n    " + Utilities.convertCelciusToFahrenheit
-                        (lastTemperature) + "\n    " +  Utilities.getDate());
+                tempTxt.setText("Current Temperature in Farenheit (time reported):\n    " + Utilities.convertCelciusToFahrenheit(lastTemperature) + "\n    " +  Utilities.getDate());
             } else {
                 tempTxt.setText("Current Temperature in Celcius (time reported):\n    " + lastTemperature + "\n    " + Utilities.getDate());
             }
 
 
             if (displayMode == DisplayMode.TEMPERATURE) {
-                updateDisplay(lastTemperature);
+                updateDisplay(Utilities.convertCelciusToFahrenheit(lastTemperature));
             }
         }
 
