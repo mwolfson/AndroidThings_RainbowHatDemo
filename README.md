@@ -1,7 +1,7 @@
-#### AndroidThings_RainbowHatDemo
+## AndroidThings_RainbowHatDemo
 This Android Things project executes all the hardware that is on the Pimoroni Rainbow HAT for Android Things and Raspberry Pi 3
 
-###__Project Explanation__
+### Project Explanation
 
 The project is designed to demonstrate the specific protocols available on the Raspberry Pi, including:
 * SPI - the APA102 LEDs
@@ -9,7 +9,7 @@ The project is designed to demonstrate the specific protocols available on the R
 * GPIO - the capacitive touch buttons and LEDs
 * PWM - the piezo buzzer
 
-### __How the demo works__
+### How the demo works
 
 **Button A**
 * (SPI) - LEDs Rainbow color switches from left/tight
@@ -17,7 +17,7 @@ The project is designed to demonstrate the specific protocols available on the R
 * (GPIO) - Button press registered, and RED LED turned on
 * (PWM) - Buzzer makes certain sound
 
-**Button B**
+_*Button B*_
 * (SPI) - LEDs Rainbow color switches between random colors
 * (12C) - Barometric Indicator (LOW/MED/HIGH) displayed
 * (GPIO) - Button press registered, and GREEN LED turned on
