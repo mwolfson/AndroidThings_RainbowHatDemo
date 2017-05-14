@@ -45,14 +45,12 @@ _*HDMI Display*_ (optional)
 About this project
 ------------------
 
-This application will demonstrate __all__ the hardware on the Rainbow HAT device in a single app.  I used the independent hardware drivers for this, but could have used the [Rainbow Hat Contrib Driver](https://github.com/androidthings/contrib-drivers/tree/master/rainbowhat) if I wanted.  This application should run on _all supported _ Android Things hardware (including the Intel Edison or Joule for example), but hasn't been tested on any devices other then the Rasberry Pi 3.
+This application will demonstrate _*all*_ the hardware on the Rainbow HAT device in a single app.  I used the independent hardware drivers for this, but could have used the [Rainbow Hat Contrib Driver](https://github.com/androidthings/contrib-drivers/tree/master/rainbowhat) if I wanted.  This application should run on _all supported _ Android Things hardware (including the Intel Edison or Joule for example), but hasn't been tested on any devices other then the Rasberry Pi 3.
 
 I made extensive use of the drivers and examples on the [Official Android Things Gitbub](https://github.com/androidthings) site - it is a great resource.
 
 License
 -------
-
-Copyright 2016 The Android Open Source Project, Inc.
 
 Licensed to the Apache Software Foundation (ASF) under one or more contributor
 license agreements.  See the NOTICE file distributed with this work for
