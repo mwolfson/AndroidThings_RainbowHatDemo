@@ -24,6 +24,12 @@ import com.google.android.things.contrib.driver.ht16k33.AlphanumericDisplay;
 import com.google.android.things.contrib.driver.pwmspeaker.Speaker;
 import com.google.android.things.pio.Gpio;
 import com.google.android.things.pio.PeripheralManagerService;
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -54,10 +60,13 @@ public class ThingActivity extends AppCompatActivity {
 
     private AlphanumericDisplay alphaDisplay;
     private static final float CLEAR_DISPLAY = 73638.45f;
+    private String message;
+
     private enum DisplayMode {
         TEMPERATURE,
         PRESSURE,
-        CLEAR
+        CLEAR,
+        MESSAGE
     }
     private DisplayMode displayMode = DisplayMode.TEMPERATURE;
     private boolean useFarenheit = true;
@@ -89,6 +98,22 @@ public class ThingActivity extends AppCompatActivity {
         titleTxt = (TextView) findViewById(R.id.text_title);
         tempTxt = (TextView) findViewById(R.id.text_temperature);
         pressureTxt = (TextView) findViewById(R.id.text_pressure);
+
+        FirebaseApp.initializeApp(getApplicationContext());
+        DatabaseReference ref = FirebaseDatabase.getInstance().getReference();
+        ref.child("message").addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot dataSnapshot) {
+                displayMode = DisplayMode.MESSAGE;
+                message = (String) dataSnapshot.getValue();
+                updateDisplay(message);
+            }
+
+            @Override
+            public void onCancelled(DatabaseError databaseError) {
+
+            }
+        });
 
         // Set current IP on display (need this to connect ADB)
         String currentIp = getIPAddress(true);
@@ -426,8 +451,13 @@ public class ThingActivity extends AppCompatActivity {
             }, SPEAKER_READY_DELAY_MS);
         }
     }
-
     private void updateDisplay(float value) {
+        updateDisplay(value, "");
+    }
+    private void updateDisplay(String message) {
+        updateDisplay(0, message);
+    }
+    private void updateDisplay(float value, String message) {
         if (alphaDisplay != null) {
             try {
                 if (displayMode == DisplayMode.PRESSURE) {
@@ -440,6 +470,8 @@ public class ThingActivity extends AppCompatActivity {
                     }
                 } else if (displayMode == DisplayMode.CLEAR) {
                     alphaDisplay.clear();
+                } else if (displayMode == DisplayMode.MESSAGE) {
+                    alphaDisplay.display(message);
                 } else {
                     alphaDisplay.display(value);
                 }

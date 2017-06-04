@@ -26,12 +26,12 @@ dependencies {
     })
     compile 'com.android.support:appcompat-v7:25.2.0'
     compile 'com.android.support.constraint:constraint-layout:1.0.0-beta4'
-    compile 'com.google.android.things.contrib:driver-button:0.2'
-    compile 'com.google.android.things.contrib:driver-bmx280:0.1'
-    compile 'com.google.android.things.contrib:driver-ht16k33:0.2'
-    compile 'com.google.android.things.contrib:driver-apa102:0.2'
-    compile 'com.google.android.things.contrib:driver-pwmspeaker:0.1'
+    compile 'com.google.android.things.contrib:driver-rainbowhat:0.4'
+    compile 'com.google.firebase:firebase-core:10.2.6'
+    compile 'com.google.firebase:firebase-database:10.2.6'
 
     testCompile 'junit:junit:4.12'
-    provided 'com.google.android.things:androidthings:0.1-devpreview'
+    provided 'com.google.android.things:androidthings:0.4-devpreview'
 }
+
+apply plugin: 'com.google.gms.google-services'
