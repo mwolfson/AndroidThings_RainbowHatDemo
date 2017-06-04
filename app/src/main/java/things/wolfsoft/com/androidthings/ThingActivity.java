@@ -24,13 +24,24 @@ import com.google.android.things.contrib.driver.ht16k33.AlphanumericDisplay;
 import com.google.android.things.contrib.driver.pwmspeaker.Speaker;
 import com.google.android.things.pio.Gpio;
 import com.google.android.things.pio.PeripheralManagerService;
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
 import java.util.Random;
+import java.util.Stack;
+import java.util.Timer;
+import java.util.TimerTask;
 
 public class ThingActivity extends AppCompatActivity {
     private static final String TAG = "ThingActivity";
@@ -54,11 +65,21 @@ public class ThingActivity extends AppCompatActivity {
 
     private AlphanumericDisplay alphaDisplay;
     private static final float CLEAR_DISPLAY = 73638.45f;
+    private String message;
+    private Stack<Character> charStack = new Stack();
+    private Handler handler;
+    private int counter = 0;
+
+    private int[] colors = new int[NUM_LEDS];
+    private Runnable runnable;
+
     private enum DisplayMode {
         TEMPERATURE,
         PRESSURE,
-        CLEAR
+        CLEAR,
+        MESSAGE
     }
+
     private DisplayMode displayMode = DisplayMode.TEMPERATURE;
     private boolean useFarenheit = true;
 
@@ -80,15 +101,47 @@ public class ThingActivity extends AppCompatActivity {
     private TextView tempTxt;
     private TextView pressureTxt;
 
+    private CircularLinkedList<Character> linkedList = new CircularLinkedList<>();
+    DatabaseReference ref;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_thing);
 
+        handler = new Handler();
+
         Log.d(TAG, "Hello Android Things!");
         titleTxt = (TextView) findViewById(R.id.text_title);
         tempTxt = (TextView) findViewById(R.id.text_temperature);
         pressureTxt = (TextView) findViewById(R.id.text_pressure);
+
+        FirebaseApp.initializeApp(getApplicationContext());
+        ref = FirebaseDatabase.getInstance().getReference();
+
+        ref.child("message").addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot dataSnapshot) {
+                linkedList = new CircularLinkedList<>();
+                handler.removeCallbacks(runnable);
+                displayMode = DisplayMode.MESSAGE;
+                message = (String) dataSnapshot.getValue();
+                if (message.length() > 4) {
+                    message = message + "   ";
+                    createLinkedList();
+                    scrollMarquee();
+                } else {
+                    updateDisplay(message);
+                }
+            }
+
+            @Override
+            public void onCancelled(DatabaseError databaseError) {
+
+            }
+        });
+
+        listenForColor();
 
         // Set current IP on display (need this to connect ADB)
         String currentIp = getIPAddress(true);
@@ -174,6 +227,75 @@ public class ThingActivity extends AppCompatActivity {
         } catch (IOException e) {
             throw new RuntimeException("Error initializing BMP280", e);
         }
+    }
+
+    private void listenForColor() {
+        ref.child("mood-color").addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot dataSnapshot) {
+                String color = (String) dataSnapshot.getValue();
+                System.out.println(color);
+
+
+                for (int i = 0; i < 7; i++) {
+                    colors[i] = Color.parseColor(color);
+                }
+
+                runLEDStrip(colors);
+            }
+
+            @Override
+            public void onCancelled(DatabaseError databaseError) {
+
+            }
+        });
+    }
+
+    private void runLEDStrip(int[] colors) {
+        try {
+            ledstrip.write(colors);
+            ledstrip.setBrightness(LEDSTRIP_BRIGHTNESS);
+        } catch (IOException e) {
+            Log.e(TAG, "Error setting ledstrip", e);
+        }
+    }
+
+    private void createLinkedList() {
+        for (int i=0; i < message.length(); i++){
+            linkedList.addNodeAtEnd(message.charAt(i));
+        }
+    }
+
+    private void scrollMarquee() {
+        updateDisplay(message);
+
+        handler = new Handler();
+        runnable = new Runnable() {
+            @Override
+            public void run() {
+                updateDisplay(newMessage(message));
+                handler.postDelayed(this, 1000);
+            }
+        };
+        handler.post(runnable);
+    }
+
+    private String newMessage(String message) {
+        StringBuilder fourChars = new StringBuilder();
+        Node node = linkedList.getNode(counter);
+
+        for (int i=0; i<3; i++){
+            fourChars.append(node.data);
+            node = node.next;
+        }
+        fourChars.append(node.data);
+
+        if ((counter++) == message.length()){
+         counter = -1;
+        }
+        counter++;
+        Log.d("Chars: ", fourChars.toString());
+        return fourChars.toString();
     }
 
     @Override
@@ -344,6 +466,7 @@ public class ThingActivity extends AppCompatActivity {
 
     /**
      * Helper Method to turn one of 3 LEDs, and turn off the others
+     *
      * @param ledType
      */
     private void showLED(int ledType) {
@@ -428,6 +551,14 @@ public class ThingActivity extends AppCompatActivity {
     }
 
     private void updateDisplay(float value) {
+        updateDisplay(value, "");
+    }
+
+    private void updateDisplay(String message) {
+        updateDisplay(0, message);
+    }
+
+    private void updateDisplay(float value, String message) {
         if (alphaDisplay != null) {
             try {
                 if (displayMode == DisplayMode.PRESSURE) {
@@ -440,6 +571,8 @@ public class ThingActivity extends AppCompatActivity {
                     }
                 } else if (displayMode == DisplayMode.CLEAR) {
                     alphaDisplay.clear();
+                } else if (displayMode == DisplayMode.MESSAGE) {
+                    alphaDisplay.display(message);
                 } else {
                     alphaDisplay.display(value);
                 }
@@ -479,7 +612,7 @@ public class ThingActivity extends AppCompatActivity {
         public void onSensorChanged(SensorEvent event) {
             lastTemperature = event.values[0];
             if (useFarenheit) {
-                tempTxt.setText("Current Temperature in Farenheit (time reported):\n    " + Utilities.convertCelciusToFahrenheit(lastTemperature) + "\n    " +  Utilities.getDate());
+                tempTxt.setText("Current Temperature in Farenheit (time reported):\n    " + Utilities.convertCelciusToFahrenheit(lastTemperature) + "\n    " + Utilities.getDate());
             } else {
                 tempTxt.setText("Current Temperature in Celcius (time reported):\n    " + lastTemperature + "\n    " + Utilities.getDate());
             }
@@ -501,7 +634,7 @@ public class ThingActivity extends AppCompatActivity {
         @Override
         public void onSensorChanged(SensorEvent event) {
             lastPressure = event.values[0];
-            pressureTxt.setText("Barometric Pressure in hectoPascals (time reported):\n    " + lastPressure/100 + "\n    " + Utilities
+            pressureTxt.setText("Barometric Pressure in hectoPascals (time reported):\n    " + lastPressure / 100 + "\n    " + Utilities
                     .getDate());
             if (displayMode == DisplayMode.PRESSURE) {
 
