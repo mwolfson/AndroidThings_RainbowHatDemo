@@ -29,7 +29,7 @@ _*Button B*_
 * (GPIO) - Button press registered, and GREEN LED turned on
 * (PWM) - Buzzer makes certain sound
 
-_*Button B*_  
+_*Button C*_  
 * (SPI) - LEDs display clear
 * (I2C) - Alphanumeric display clear
 * (GPIO) - Button press registered, and BLUE LED turned on
